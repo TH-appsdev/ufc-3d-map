@@ -19,6 +19,7 @@
   .wrap{background:#0f1a2b;padding:14px;border-radius:12px;color:#e8eef7;margin:12px}
   .bar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:6px;font-size:14px}
   label{display:inline-flex;align-items:center;gap:5px}
+  #axrow{display:inline-flex;gap:14px;align-items:center}
   select,input{padding:5px 8px;background:#1b2942;color:#e8eef7;border:1px solid #2f4162;border-radius:6px;
                font-family:inherit;max-width:100%}
   button{padding:6px 12px;cursor:pointer;background:#1b2942;color:#e8eef7;border:1px solid #2f4162;border-radius:6px;
@@ -50,6 +51,12 @@
     .bar{gap:8px 10px;font-size:13px;margin-bottom:4px}
     /* iOS で入力時に勝手に拡大されないよう 16px 以上にする */
     select,input,button{font-size:16px;padding:7px 9px}
+    /* X/Y/Z は3行ではなく1行に収める */
+    #axrow{display:flex;width:100%;gap:5px}
+    #axrow label{flex:1;min-width:0;gap:2px}
+    #axrow select{width:100%;min-width:0;padding:7px 2px 7px 5px;font-size:13px}
+    #axrow b{font-size:12px;white-space:nowrap}
+    .jiku{display:none}
     select{max-width:42vw}
     #q{max-width:48vw}
     /* 上部は横向きのカラーバーが占めるので、操作ボタンは下に逃がす */
@@ -77,9 +84,11 @@
 <div class="wrap">
   <h1>UFC 勝率3Dマップ</h1>
   <div class="bar">
-    <label><b style="color:#ff6a00">X軸</b> <select id="sx"></select></label>
-    <label><b style="color:#e03cff">Y軸</b> <select id="sy"></select></label>
-    <label><b style="color:#00f0a0">Z軸</b> <select id="sz"></select></label>
+    <span id="axrow">
+      <label><b style="color:#ff6a00">X<span class="jiku">軸</span></b> <select id="sx"></select></label>
+      <label><b style="color:#e03cff">Y<span class="jiku">軸</span></b> <select id="sy"></select></label>
+      <label><b style="color:#00f0a0">Z<span class="jiku">軸</span></b> <select id="sz"></select></label>
+    </span>
   </div>
   <div class="bar">
     <label>階級 <select id="sf"></select></label>
@@ -125,8 +134,8 @@ let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き
 // 下に回り込むと床を見上げる形になり「反転した」ように見えるので、水平より下は禁止。
 // 上も真上を越えると反転するので手前で止める。
 const RAD = Math.PI / 180;
-const ELEV_MIN = 6 * RAD;      // 下限（ほぼ水平。これより下へは回り込ませない）
-const ELEV_MAX = 72 * RAD;     // 上限（真上の手前で止める）
+const ELEV_MIN = 15 * RAD;     // 下限（水平近くまで寝かせると読みにくいので手前で止める）
+const ELEV_MAX = 70 * RAD;     // 上限（真上の手前）
 
 // 範囲内なら null、外れていれば境界に戻したカメラを返す。
 // 距離（ズーム）は変えず、角度だけ補正する。
@@ -358,6 +367,22 @@ function sceneRect(){
   return {left:r.left, top:r.top, right:r.right, bottom:r.bottom};
 }
 
+// いまの仰角（描画中のカメラから直接読む）
+function liveElev(){
+  const gd = g("plot");
+  let cam = null;
+  try {
+    const sc = gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene;
+    if (sc && typeof sc.getCamera === "function") cam = sc.getCamera();
+  } catch (e) {}
+  if (!cam && gd._fullLayout && gd._fullLayout.scene) cam = gd._fullLayout.scene.camera;
+  if (!cam || !cam.eye) return null;
+  const c = cam.center || {x:0, y:0, z:0};
+  const dx = cam.eye.x-c.x, dy = cam.eye.y-c.y, dz = cam.eye.z-c.z;
+  const r = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  return r > 0 ? Math.asin(Math.max(-1, Math.min(1, dz/r))) : null;
+}
+
 let guardsInstalled = false;
 function installGuards(){
   if (guardsInstalled) return;
@@ -371,6 +396,41 @@ function installGuards(){
     if (x == null || y == null) return true;
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   };
+  // 上限・下限に達したら、それ以上めくる向きの指の動きを plotly に渡さない。
+  // （離したあとの補正だけでは、ドラッグ中に一瞬裏返って見えてしまうため）
+  let lx = null, ly = null;
+  const pos = ev => {
+    const t = ev.touches && ev.touches[0];
+    return {x: t ? t.clientX : ev.clientX, y: t ? t.clientY : ev.clientY};
+  };
+  ["mousedown", "touchstart"].forEach(t =>
+    plot.addEventListener(t, ev => { const p = pos(ev); lx = p.x; ly = p.y; },
+                          {capture:true, passive:true}));
+  ["mousemove", "touchmove"].forEach(type => {
+    plot.addEventListener(type, ev => {
+      const p = pos(ev);
+      if (p.x == null || p.y == null) return;
+      if (lx != null){
+        const dy = p.y - ly;
+        const e = liveElev();
+        if (e != null && dy !== 0){
+          // この移動で仰角がどこまで動くかを見積もり、範囲を越えるなら渡さない。
+          // 速くスワイプされても一瞬裏返らないよう、事前に止めるのが要点。
+          // （横の動きが主なら dy が小さく見積もりも範囲内に収まるので、
+          //   境界に貼り付いたままでも左右の回転は続けられる）
+          const h = plot.getBoundingClientRect().height || 1;
+          const next = e + dy * (170 * RAD / h);
+          if (next < ELEV_MIN || next > ELEV_MAX){
+            ev.stopPropagation();
+            if (ev.cancelable) ev.preventDefault();
+            return;                           // lx/ly は更新せず、境界に貼り付ける
+          }
+        }
+      }
+      lx = p.x; ly = p.y;
+    }, {capture:true, passive:false});
+  });
+
   ["wheel", "mousedown", "touchstart"].forEach(type => {
     plot.addEventListener(type, ev => {
       // 右上のツールバーは 3D 空間の外にあっても操作できるようにする
