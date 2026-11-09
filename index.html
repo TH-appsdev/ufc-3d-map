@@ -33,7 +33,11 @@
   #plotwrap{position:relative;border:1px solid #4f74ab;border-radius:10px;
             background:rgba(79,116,171,.10);overflow:hidden}
   #plot{height:clamp(360px, 70vh, 760px)}
-  #btns{position:absolute;top:10px;right:12px;z-index:5;display:flex;gap:6px}
+  #btns{position:absolute;top:10px;right:12px;z-index:5;
+        display:flex;gap:6px;align-items:center}
+  #qwrap{display:inline-flex;align-items:center;gap:4px;
+         background:rgba(11,20,34,.75);padding:3px 8px;border-radius:7px}
+  #q{min-width:150px}
   #zcap{display:none}
   .zbtn{display:none}
   #info{display:none}
@@ -48,7 +52,11 @@
     select{max-width:42vw}
     #q{max-width:48vw}
     /* 上部は横向きのカラーバーが占めるので、操作ボタンは下に逃がす */
-    #btns{top:auto;bottom:88px;right:8px}
+    /* 検索欄＋ズーム＋リセットを1行にして下部に置く */
+    #btns{top:auto;bottom:88px;left:8px;right:8px;gap:5px}
+    #qwrap{flex:1;min-width:0;padding:2px 6px}
+    .qtxt{display:none}
+    #q{min-width:0;width:100%}
     .reset{padding:6px 10px;font-size:13px;font-weight:600}
     .zbtn{display:block;width:38px;padding:6px 0;font-size:17px;line-height:1;
           font-weight:700;background:#2b4a7a;border-color:#4e7ab8}
@@ -74,13 +82,14 @@
   <div class="bar">
     <label>階級 <select id="sf"></select></label>
     <label>性別 <select id="sg"></select></label>
-    <label>🔍 名前検索 <input id="q" placeholder="例: Pantoja" style="min-width:170px"></label>
     <span id="count" style="opacity:.65;font-size:12px"></span>
   </div>
   <div id="plotwrap">
     <div id="plot"></div>
     <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
     <div id="btns">
+      <label id="qwrap">🔍<span class="qtxt"> 名前検索</span>
+        <input id="q" placeholder="例: Pantoja"></label>
       <button id="zout" class="zbtn" title="縮小">−</button>
       <button id="zin"  class="zbtn" title="拡大">＋</button>
       <button id="reset" class="reset" title="回転・ズームを初期状態に戻します">
@@ -99,6 +108,7 @@ const sx=g("sx"), sy=g("sy"), sz=g("sz"), sf=g("sf"), sg=g("sg"), q=g("q");
 const FC = "win_rate";          // 色に使うスタッツ（固定）
 // 画面が狭いときは点とカラーバーを調整する（タップしやすさ優先）
 const MOBILE = window.matchMedia("(max-width: 640px)").matches;
+if (MOBILE) q.placeholder = "選手名";   // 幅が狭いので短く
 // 初期視点。狭い画面では立方体の角が切れないよう少し引く。
 // 「視点を初期位置に戻す」も同じ値を使うので、初期表示と完全に一致する。
 const CAM = {eye: MOBILE ? {x:2.10, y:2.10, z:1.24} : {x:1.50, y:1.50, z:0.95}};
