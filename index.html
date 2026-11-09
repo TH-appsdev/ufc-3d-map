@@ -38,6 +38,7 @@
   #qwrap{display:inline-flex;align-items:center;gap:4px;
          background:rgba(11,20,34,.75);padding:3px 8px;border-radius:7px}
   #q{min-width:150px}
+  #plotbox{position:relative}
   #zcap{display:none}
   .zbtn{display:none}
   #info{display:none}
@@ -52,8 +53,8 @@
     select{max-width:42vw}
     #q{max-width:48vw}
     /* 上部は横向きのカラーバーが占めるので、操作ボタンは下に逃がす */
-    /* 検索欄＋ズーム＋リセットを1行にして下部に置く */
-    #btns{top:auto;bottom:88px;left:8px;right:8px;gap:5px}
+    /* 操作行はグラフの上。絶対配置をやめて通常のフローに戻す */
+    #btns{position:static;top:auto;right:auto;padding:9px 9px 7px;gap:5px}
     #qwrap{flex:1;min-width:0;padding:2px 6px}
     .qtxt{display:none}
     #q{min-width:0;width:100%}
@@ -61,15 +62,15 @@
     .zbtn{display:block;width:38px;padding:6px 0;font-size:17px;line-height:1;
           font-weight:700;background:#2b4a7a;border-color:#4e7ab8}
     .zbtn:active{background:#3a5f99}
-    #plot{height:min(58vh, 440px);min-height:300px}
+    #plot{height:min(52vh, 380px);min-height:290px}
     /* 詳細はグラフの外（枠の下部）に出すので、点に被らない */
-    #zcap{display:block;position:absolute;left:2px;top:40%;z-index:4;
+    #zcap{display:block;position:absolute;left:2px;top:42%;z-index:4;
           writing-mode:vertical-rl;transform:rotate(180deg);
           font-size:10px;pointer-events:none;white-space:nowrap}
     .iname{font-size:13px;margin-bottom:3px}
     .ic{display:inline-block;margin:0 10px 2px 0;white-space:nowrap}
-    #info{display:block;min-height:70px;padding:7px 10px 9px;
-          border-top:1px solid #35507d;background:rgba(11,20,34,.55);
+    #info{display:block;min-height:54px;padding:0 10px 9px;
+          border-bottom:1px solid #35507d;background:rgba(11,20,34,.55);
           font-size:11.5px;line-height:1.5}
   }
 </style></head><body>
@@ -86,8 +87,6 @@
     <span id="count" style="opacity:.65;font-size:12px"></span>
   </div>
   <div id="plotwrap">
-    <div id="plot"></div>
-    <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
     <div id="btns">
       <label id="qwrap">🔍<span class="qtxt"> 名前検索</span>
         <input id="q" placeholder="例: Pantoja"></label>
@@ -97,7 +96,11 @@
         ⟲ 視点をリセット
       </button>
     </div>
-    <div id="info"></div><!-- スマホ用: タップした選手の詳細（グラフに被らない位置） -->
+    <div id="info"></div><!-- スマホ用: 選手の詳細 -->
+    <div id="plotbox">
+      <div id="plot"></div>
+      <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
+    </div>
   </div>
 </div>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -112,7 +115,10 @@ const MOBILE = window.matchMedia("(max-width: 640px)").matches;
 if (MOBILE) q.placeholder = "選手名";   // 幅が狭いので短く
 // 初期視点。狭い画面では立方体の角が切れないよう少し引く。
 // 「視点を初期位置に戻す」も同じ値を使うので、初期表示と完全に一致する。
-const CAM = {eye: MOBILE ? {x:2.10, y:2.10, z:1.24} : {x:1.50, y:1.50, z:0.95}};
+const CAM = MOBILE
+  // スマホは立方体を少し上に寄せて、勝率バーとの間の余白を詰める
+  ? {eye:{x:1.70, y:1.70, z:1.00}, center:{x:0, y:0, z:0}}
+  : {eye:{x:1.50, y:1.50, z:0.95}};
 let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き継ぐために保持する。
 
 // 左右の回り込みは360°自由。上下だけ制限する。
@@ -332,7 +338,10 @@ function render(){
     font:{color:"#e8eef7", size: MOBILE ? 11 : 12},
     margin: MOBILE ? {l:26, r:20, t:8, b:14} : {l:0, r:0, t:6, b:0},
     showlegend: false,
-    scene:{aspectmode:"cube", hovermode:"closest", camera: curCam,
+    scene:{// スマホは縦長の箱にして、勝率バーとの間の余白を使い切る
+           aspectmode: MOBILE ? "manual" : "cube",
+           aspectratio: MOBILE ? {x:1, y:1, z:1.25} : undefined,
+           hovermode:"closest", camera: curCam,
       xaxis: axisCfg(LAB[fx]||fx, AXC.x),
       yaxis: axisCfg(LAB[fy]||fy, AXC.y),
       zaxis: axisCfg(LAB[fz]||fz, AXC.z, true)}
