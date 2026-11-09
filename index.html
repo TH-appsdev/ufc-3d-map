@@ -33,7 +33,10 @@
   #plotwrap{position:relative;border:1px solid #4f74ab;border-radius:10px;
             background:rgba(79,116,171,.10);overflow:hidden}
   #plot{height:clamp(360px, 70vh, 760px)}
-  .reset{position:absolute;top:10px;right:12px;z-index:5}
+  #btns{position:absolute;top:10px;right:12px;z-index:5;display:flex;gap:6px}
+  .zbtn{display:none}
+  #axkey{display:none}
+  #info{display:none}
 
   /* --- スマートフォン --- */
   @media (max-width: 640px){
@@ -44,9 +47,21 @@
     select,input,button{font-size:16px;padding:7px 9px}
     select{max-width:42vw}
     #q{max-width:48vw}
-    /* 上部は横向きのカラーバーが占めるので、ボタンは下に逃がす */
-    .reset{top:auto;bottom:8px;right:8px;padding:6px 10px;font-size:13px;font-weight:600}
-    #plot{height:min(68vh, 520px);min-height:320px}
+    /* 上部は横向きのカラーバーが占めるので、操作ボタンは下に逃がす */
+    #btns{top:auto;bottom:88px;right:8px}
+    .reset{padding:6px 10px;font-size:13px;font-weight:600}
+    .zbtn{display:block;width:38px;padding:6px 0;font-size:17px;line-height:1;
+          font-weight:700;background:#2b4a7a;border-color:#4e7ab8}
+    .zbtn:active{background:#3a5f99}
+    #plot{height:min(58vh, 440px);min-height:300px}
+    /* 軸の凡例。カラーバーの下の空きスペースに置く */
+    #axkey{display:block;position:absolute;left:8px;top:74px;z-index:4;
+           pointer-events:none;font-size:10px;line-height:1.5;
+           background:rgba(11,20,34,.5);padding:3px 6px;border-radius:5px}
+    /* 詳細はグラフの外（枠の下部）に出すので、点に被らない */
+    #info{display:block;min-height:58px;padding:7px 10px 9px;
+          border-top:1px solid #35507d;background:rgba(11,20,34,.55);
+          font-size:11.5px;line-height:1.5}
   }
 </style></head><body>
 <div class="wrap">
@@ -64,9 +79,15 @@
   </div>
   <div id="plotwrap">
     <div id="plot"></div>
-    <button id="reset" class="reset" title="回転・ズームを初期状態に戻します">
-      ⟲ 視点をリセット
-    </button>
+    <div id="axkey"></div><!-- スマホ用: どの軸が何かの凡例 -->
+    <div id="btns">
+      <button id="zout" class="zbtn" title="縮小">−</button>
+      <button id="zin"  class="zbtn" title="拡大">＋</button>
+      <button id="reset" class="reset" title="回転・ズームを初期状態に戻します">
+        ⟲ 視点をリセット
+      </button>
+    </div>
+    <div id="info"></div><!-- スマホ用: タップした選手の詳細（グラフに被らない位置） -->
   </div>
 </div>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
@@ -173,8 +194,50 @@ function row(ax, field, val){
        + (LAB[field]||field) + ": <b>" + val + "</b><br>";
 }
 
+let curF = {x:"", y:"", z:""};   // いま各軸に割り当てている指標
+
+// スマホ用：軸の凡例（3D 内のタイトルは端で切れるため、枠内に別途表示する）
+function renderAxKey(){
+  if (!MOBILE) return;
+  g("axkey").innerHTML = ["x","y","z"].map(a =>
+    "<span style='color:" + AXC[a] + "'>■ " + a.toUpperCase() + "</span> "
+    + (LAB[curF[a]] || curF[a])).join("<br>");
+}
+
+// スマホ用：タップした選手の詳細。グラフの外に出すので点が隠れない。
+const INFO_HINT = "<span style='opacity:.55'>点をタップすると選手の詳細が出ます</span>";
+function showInfo(p){
+  if (!MOBILE) return;
+  if (!p){ g("info").innerHTML = INFO_HINT; return; }
+  const cd = p.customdata || [];
+  const num = v => v == null ? "-"
+      : (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
+  const cell = (a, v) => "<span style='color:" + AXC[a] + "'>" + a.toUpperCase()
+                       + "</span> <b>" + num(v) + "</b>";
+  g("info").innerHTML =
+      "<b style='font-size:13px'>" + (p.text || "") + "</b>"
+    + "<span style='opacity:.6'>　" + (cd[1] || "") + "</span><br>"
+    + cell("x", p.x) + "　" + cell("y", p.y) + "　" + cell("z", p.z)
+    + "　<span style='color:#8aa0c0'>●</span> 勝率 <b>" + num(cd[0]) + "</b>";
+}
+
+// ズーム（スマホはピンチが効かないことがあるのでボタンで操作する）
+function zoom(factor){
+  const c = curCam.center || {x:0, y:0, z:0}, e = curCam.eye;
+  let dx = e.x-c.x, dy = e.y-c.y, dz = e.z-c.z;
+  const r = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  if (!(r > 0)) return;
+  const nr = Math.max(0.9, Math.min(6.0, r * factor));   // 寄りすぎ・引きすぎを防ぐ
+  const k = nr / r;
+  curCam = Object.assign({}, curCam,
+    {eye:{x:c.x+dx*k, y:c.y+dy*k, z:c.z+dz*k}});
+  Plotly.relayout("plot", {"scene.camera": curCam});
+}
+
 function render(){
   const fx=sx.value, fy=sy.value, fz=sz.value, fc=FC;
+  curF = {x:fx, y:fy, z:fz};
+  renderAxKey();
   const flt=sf.value, gen=sg.value, query=norm(q.value.trim());
   const X=D.stats[fx], Y=D.stats[fy], Z=D.stats[fz], C=D.stats[fc];
 
@@ -213,6 +276,7 @@ function render(){
                  len:0.6, thickness:14, outlinewidth:0,
                  tickfont:{color:"#d4e0f0", size:11}}},
     hovertemplate: HOVER,
+    hoverinfo: MOBILE ? "none" : "all",   // スマホは吹き出しを出さず下の欄に表示
     hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#55688a",
                 font:{color:"#e8eef7", size:13}}
   }];
@@ -233,11 +297,12 @@ function render(){
       textfont:{color:"#fff", size: MOBILE ? 12 : 12},
       // 色は塗り替えず勝率のまま。大きさと白い縁取りで目立たせる
       // （黄色で塗ると勝率が読めなくなり、カラースケール中間の色とも紛れるため）
-      marker:{size: MOBILE ? 10 : 8,
+      marker:{size: MOBILE ? 12 : 10,
               color:hc, colorscale:SCALE, cmin:cmin, cmax:cmax, showscale:false,
               line:{color:"#ffffff", width:2}},
       // 通常の点と同じ内容（X/Y/Z の値と勝率）を出す
       hovertemplate: HOVER,
+      hoverinfo: MOBILE ? "none" : "all",
       hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#ffffff",
                   font:{color:"#e8eef7", size:13}}
     });
@@ -297,8 +362,12 @@ q.oninput = render;
 g("reset").onclick = () => {
   curCam = CAM;
   Plotly.relayout("plot", {"scene.camera": CAM});
+  showInfo(null);
 };
+g("zin").onclick  = () => zoom(0.80);   // 寄る
+g("zout").onclick = () => zoom(1.25);   // 引く
 render();
+showInfo(null);
 installGuards();   // 判定はイベント発生時に行うので、描画完了を待つ必要はない
 
 // ドラッグやズームの結果を覚えておき、軸を切り替えても視点を引き継ぐ。
@@ -316,6 +385,10 @@ function onCamera(ev){
   if (p && p.then) p.then(done, done); else done();
 }
 if (g("plot").on){
+  // 点をタップ／ホバーしたら、スマホでは下の欄に詳細を出す
+  const pick = ev => { if (ev && ev.points && ev.points.length) showInfo(ev.points[0]); };
+  g("plot").on("plotly_hover", pick);
+  g("plot").on("plotly_click", pick);
   g("plot").on("plotly_relayout", onCamera);
   g("plot").on("plotly_relayouting", onCamera);   // ドラッグ中にも効かせる
 }
