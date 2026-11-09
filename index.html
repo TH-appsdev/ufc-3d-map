@@ -44,16 +44,17 @@
     select,input,button{font-size:16px;padding:7px 9px}
     select{max-width:42vw}
     #q{max-width:48vw}
-    .reset{top:8px;right:8px;padding:6px 10px;font-size:13px;font-weight:600}
+    /* 上部は横向きのカラーバーが占めるので、ボタンは下に逃がす */
+    .reset{top:auto;bottom:8px;right:8px;padding:6px 10px;font-size:13px;font-weight:600}
     #plot{height:min(68vh, 520px);min-height:320px}
   }
 </style></head><body>
 <div class="wrap">
   <h1>UFC 勝率3Dマップ</h1>
   <div class="bar">
-    <label>X軸 <select id="sx"></select></label>
-    <label>Y軸 <select id="sy"></select></label>
-    <label>Z軸 <select id="sz"></select></label>
+    <label><b style="color:#ff6a00">X軸</b> <select id="sx"></select></label>
+    <label><b style="color:#e03cff">Y軸</b> <select id="sy"></select></label>
+    <label><b style="color:#00f0a0">Z軸</b> <select id="sz"></select></label>
   </div>
   <div class="bar">
     <label>階級 <select id="sf"></select></label>
@@ -64,7 +65,7 @@
   <div id="plotwrap">
     <div id="plot"></div>
     <button id="reset" class="reset" title="回転・ズームを初期状態に戻します">
-      ⟲ 視点を初期位置に戻す
+      ⟲ 視点をリセット
     </button>
   </div>
 </div>
@@ -79,7 +80,7 @@ const FC = "win_rate";          // 色に使うスタッツ（固定）
 const MOBILE = window.matchMedia("(max-width: 640px)").matches;
 // 初期視点。狭い画面では立方体の角が切れないよう少し引く。
 // 「視点を初期位置に戻す」も同じ値を使うので、初期表示と完全に一致する。
-const CAM = {eye: MOBILE ? {x:1.80, y:1.80, z:1.05} : {x:1.50, y:1.50, z:0.95}};
+const CAM = {eye: MOBILE ? {x:1.90, y:1.90, z:1.12} : {x:1.50, y:1.50, z:0.95}};
 let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き継ぐために保持する。
 
 // 左右の回り込みは360°自由。上下だけ制限する。
@@ -155,7 +156,9 @@ const AXC = {x:"#ff6a00", y:"#e03cff", z:"#00f0a0"};  // 軸の識別色（軸�
 const SPIKE = "#c3d1e4";                              // ホバー時のガイド線（3軸とも同色）
 
 function axisCfg(title, color){
-  return {title:{text:title, font:{color:color, size: MOBILE ? 11 : 14}},
+  // 狭い画面では軸タイトルが端で切れてしまうので出さない。
+  // 代わりに上のプルダウンのラベルを軸色にして対応づける。
+  return {title:{text: MOBILE ? "" : title, font:{color:color, size:14}},
           tickfont:{color:"#d4e0f0", size: MOBILE ? 9 : 11},
           showbackground:true, backgroundcolor:"#16263f",   // 立方体の面を少し明るく
           gridcolor:"#5a749c", gridwidth:2,                 // 格子線をはっきり
@@ -192,11 +195,15 @@ function render(){
     x:bx, y:by, z:bz, text:bt, customdata:bc,
     marker:{size: MOBILE ? 8 : 6, color:bc, colorscale:SCALE, cmin:cmin, cmax:cmax,
             opacity: query ? 0.22 : 0.92, line:{width:0.4, color:"#0f1a2b"},
-            colorbar:{title:{text:LAB[fc]||fc, side:"right",
-                             font:{size: MOBILE ? 11 : 13}},
-                      len: MOBILE ? 0.8 : 0.6, thickness: MOBILE ? 10 : 14,
-                      outlinewidth:0, x: MOBILE ? 1.02 : undefined,
-                      tickfont:{color:"#d4e0f0", size: MOBILE ? 9 : 11}}},
+            // 狭い画面では縦のカラーバーが Z 軸を圧迫するので、上部に横向きで置く
+            colorbar: MOBILE
+              ? {orientation:"h", x:0.5, xanchor:"center", y:1.0, yanchor:"bottom",
+                 len:0.92, thickness:9, outlinewidth:0,
+                 title:{text:LAB[fc]||fc, side:"top", font:{size:11}},
+                 tickfont:{color:"#d4e0f0", size:9}}
+              : {title:{text:LAB[fc]||fc, side:"right", font:{size:13}},
+                 len:0.6, thickness:14, outlinewidth:0,
+                 tickfont:{color:"#d4e0f0", size:11}}},
     hovertemplate:
       "<b style='font-size:14px'>%{text}</b><br>"
       + row("x", fx, "%{x}") + row("y", fy, "%{y}") + row("z", fz, "%{z}")
@@ -227,7 +234,7 @@ function render(){
   Plotly.react("plot", traces, {
     paper_bgcolor:"rgba(0,0,0,0)",   // 枠の淡い塗りを透かす
     font:{color:"#e8eef7", size: MOBILE ? 11 : 12},
-    margin: MOBILE ? {l:10, r:6, t:6, b:8} : {l:0, r:0, t:6, b:0},
+    margin: MOBILE ? {l:18, r:10, t:48, b:10} : {l:0, r:0, t:6, b:0},
     showlegend: !!query, legend:{x:0, y:1},
     scene:{aspectmode:"cube", hovermode:"closest", camera: curCam,
       xaxis: axisCfg(LAB[fx]||fx, AXC.x),
