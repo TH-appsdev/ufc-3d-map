@@ -66,8 +66,9 @@
     #zcap{display:block;position:absolute;left:2px;top:40%;z-index:4;
           writing-mode:vertical-rl;transform:rotate(180deg);
           font-size:10px;pointer-events:none;white-space:nowrap}
+    .iname{font-size:13px;margin-bottom:3px}
     .ic{display:inline-block;margin:0 10px 2px 0;white-space:nowrap}
-    #info{display:block;min-height:54px;padding:7px 10px 9px;
+    #info{display:block;min-height:70px;padding:7px 10px 9px;
           border-top:1px solid #35507d;background:rgba(11,20,34,.55);
           font-size:11.5px;line-height:1.5}
   }
@@ -218,7 +219,11 @@ function showInfo(p){
       "<span class='ic'><span style='color:" + col + "'>" + mark + "</span> "
     + name + " <b>" + num(v) + "</b></span>";
   g("info").innerHTML =
-      cell("■ X", AXC.x, LAB[curF.x] || curF.x, p.x)
+      "<div class='iname'><b>" + (p.text || "") + "</b>"
+    + "<span style='opacity:.6'>　" + (cd[1] || "") + "</span>"
+    + (p.more ? "<span style='opacity:.6'>　ほか " + p.more + " 人</span>" : "")
+    + "</div>"
+    + cell("■ X", AXC.x, LAB[curF.x] || curF.x, p.x)
     + cell("■ Y", AXC.y, LAB[curF.y] || curF.y, p.y)
     + cell("■ Z", AXC.z, LAB[curF.z] || curF.z, p.z)
     + cell("●",  "#8aa0c0", LAB[FC] || FC, cd[0]);
@@ -310,6 +315,13 @@ function render(){
                   font:{color:"#e8eef7", size:13}}
     });
     hits = hx.length;
+    // 検索でヒットしたら、タップしなくても詳細欄に出す
+    if (hits > 0){
+      showInfo({text:ht[0], x:hx[0], y:hy[0], z:hz[0], customdata:hd[0],
+                more: hits > 1 ? hits - 1 : 0});
+    } else {
+      g("info").innerHTML = "<span style='opacity:.55'>該当する選手がいません</span>";
+    }
   }
 
   g("count").textContent = "表示 " + bx.length + " 人 / 全 " + D.names.length + " 人"
