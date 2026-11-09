@@ -178,21 +178,29 @@ function render(){
   const flt=sf.value, gen=sg.value, query=norm(q.value.trim());
   const X=D.stats[fx], Y=D.stats[fy], Z=D.stats[fz], C=D.stats[fc];
 
-  const bx=[],by=[],bz=[],bc=[],bt=[];
+  const bx=[],by=[],bz=[],bc=[],bt=[],bd=[];
   D.names.forEach((nm,i) => {
     if (flt !== "すべての階級" && D.divisions[i] !== flt) return;
     if (gen !== "男女とも" && D.genders[i] !== gen) return;
     if (X[i]==null || Y[i]==null || Z[i]==null) return;
     bx.push(X[i]); by.push(Y[i]); bz.push(Z[i]); bc.push(C[i]);
-    bt.push(nm + "  [" + D.divisions[i] + "]");
+    bt.push(nm); bd.push([C[i], D.divisions[i]]);
   });
   // 色の範囲は表示中のデータに合わせてコントラストを出す
   const cv = bc.filter(v => v != null);
   const cmin = cv.length ? Math.min(...cv) : 0, cmax = cv.length ? Math.max(...cv) : 1;
 
+  // ツールチップの中身。通常の点でも検索でヒットした点でも同じものを使う。
+  const HOVER =
+      "<b style='font-size:14px'>%{text}</b>"
+    + "<span style='color:#8aa0c0'>　%{customdata[1]}</span><br>"
+    + row("x", fx, "%{x}") + row("y", fy, "%{y}") + row("z", fz, "%{z}")
+    + "<span style='color:#8aa0c0'>●</span> " + (LAB[fc]||fc)
+    + ": <b>%{customdata[0]}</b><extra></extra>";
+
   const traces = [{
     type:"scatter3d", mode:"markers", name:"選手", showlegend:false,
-    x:bx, y:by, z:bz, text:bt, customdata:bc,
+    x:bx, y:by, z:bz, text:bt, customdata:bd,
     marker:{size: MOBILE ? 8 : 6, color:bc, colorscale:SCALE, cmin:cmin, cmax:cmax,
             opacity: query ? 0.22 : 0.92, line:{width:0.4, color:"#0f1a2b"},
             // 狭い画面では縦のカラーバーが Z 軸を圧迫するので、上部に横向きで置く
@@ -204,38 +212,46 @@ function render(){
               : {title:{text:LAB[fc]||fc, side:"right", font:{size:13}},
                  len:0.6, thickness:14, outlinewidth:0,
                  tickfont:{color:"#d4e0f0", size:11}}},
-    hovertemplate:
-      "<b style='font-size:14px'>%{text}</b><br>"
-      + row("x", fx, "%{x}") + row("y", fy, "%{y}") + row("z", fz, "%{z}")
-      + "<span style='color:#8aa0c0'>●</span> " + (LAB[fc]||fc)
-      + ": <b>%{customdata}</b><extra></extra>",
+    hovertemplate: HOVER,
     hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#55688a",
                 font:{color:"#e8eef7", size:13}}
   }];
 
+  let hits = 0;
   if (query){   // 検索は絞り込みを無視して全体から探す
-    const hx=[],hy=[],hz=[],ht=[];
+    const hx=[],hy=[],hz=[],ht=[],hd=[],hc=[];
     D.names.forEach((nm,i) => {
       if (!SEARCH_KEY[i].includes(query)) return;
       if (X[i]==null || Y[i]==null || Z[i]==null) return;
-      hx.push(X[i]); hy.push(Y[i]); hz.push(Z[i]); ht.push(nm);
+      hx.push(X[i]); hy.push(Y[i]); hz.push(Z[i]); hc.push(C[i]);
+      ht.push(nm); hd.push([C[i], D.divisions[i]]);
     });
     traces.push({
       type:"scatter3d", mode:"markers+text", name:"一致 "+ht.length+"件",
-      x:hx, y:hy, z:hz, text:ht, textposition:"top center",
-      textfont:{color:"#fff", size:11},
-      marker:{size:11, color:"#ffd43b", line:{color:"#111", width:1.6}},
-      hovertemplate:"<b>%{text}</b><extra></extra>"
+      x:hx, y:hy, z:hz, text:ht, customdata:hd,
+      textposition:"top center",
+      textfont:{color:"#fff", size: MOBILE ? 12 : 12},
+      // 色は塗り替えず勝率のまま。大きさと白い縁取りで目立たせる
+      // （黄色で塗ると勝率が読めなくなり、カラースケール中間の色とも紛れるため）
+      marker:{size: MOBILE ? 10 : 8,
+              color:hc, colorscale:SCALE, cmin:cmin, cmax:cmax, showscale:false,
+              line:{color:"#ffffff", width:2}},
+      // 通常の点と同じ内容（X/Y/Z の値と勝率）を出す
+      hovertemplate: HOVER,
+      hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#ffffff",
+                  font:{color:"#e8eef7", size:13}}
     });
+    hits = hx.length;
   }
 
-  g("count").textContent = "表示 " + bx.length + " 人 / 全 " + D.names.length + " 人";
+  g("count").textContent = "表示 " + bx.length + " 人 / 全 " + D.names.length + " 人"
+    + (query ? "　🔍 一致 " + hits + " 人" : "");
 
   Plotly.react("plot", traces, {
     paper_bgcolor:"rgba(0,0,0,0)",   // 枠の淡い塗りを透かす
     font:{color:"#e8eef7", size: MOBILE ? 11 : 12},
     margin: MOBILE ? {l:18, r:10, t:48, b:10} : {l:0, r:0, t:6, b:0},
-    showlegend: !!query, legend:{x:0, y:1},
+    showlegend: false,
     scene:{aspectmode:"cube", hovermode:"closest", camera: curCam,
       xaxis: axisCfg(LAB[fx]||fx, AXC.x),
       yaxis: axisCfg(LAB[fy]||fy, AXC.y),
