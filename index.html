@@ -19,7 +19,10 @@
   .wrap{background:#0f1a2b;padding:14px;border-radius:12px;color:#e8eef7;margin:12px}
   .bar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:6px;font-size:14px}
   label{display:inline-flex;align-items:center;gap:5px}
-  #axrow{display:inline-flex;gap:14px;align-items:center}
+  #axrow,#filtrow{display:inline-flex;gap:14px;align-items:center}
+  #count{opacity:.65;font-size:12px}
+  /* 5つのプルダウンの幅をそろえる */
+  #axrow select,#filtrow select{min-width:190px}
   select,input{padding:5px 8px;background:#1b2942;color:#e8eef7;border:1px solid #2f4162;border-radius:6px;
                font-family:inherit;max-width:100%}
   button{padding:6px 12px;cursor:pointer;background:#1b2942;color:#e8eef7;border:1px solid #2f4162;border-radius:6px;
@@ -40,6 +43,9 @@
          background:rgba(11,20,34,.75);padding:3px 8px;border-radius:7px}
   #q{min-width:150px}
   #plotbox{position:relative}
+  /* 勝率バーの右下に出す小さな案内 */
+  #tapnote{position:absolute;display:none;z-index:4;pointer-events:none;
+           font-size:10px;color:#8aa0c0;white-space:nowrap}
   #zcap{display:none}
   .zbtn{display:none}
   #info{display:none}
@@ -51,10 +57,15 @@
     .bar{gap:8px 10px;font-size:13px;margin-bottom:4px}
     /* iOS で入力時に勝手に拡大されないよう 16px 以上にする */
     select,input,button{font-size:16px;padding:7px 9px}
-    /* X/Y/Z は3行ではなく1行に収める */
-    #axrow{display:flex;width:100%;gap:5px}
-    #axrow label{flex:1;min-width:0;gap:2px}
-    #axrow select{width:100%;min-width:0;padding:7px 2px 7px 5px;font-size:13px}
+    /* X/Y/Z と 階級/性別 を同じ3分割の行にそろえる */
+    #axrow,#filtrow{display:flex;width:100%;gap:5px}
+    #axrow label,#filtrow label{flex:1;min-width:0;white-space:nowrap;
+                                display:grid;grid-template-columns:25px 1fr;
+                                align-items:center;gap:3px}
+    #filtrow label{font-size:11px}
+    #filtrow #count{flex:1;min-width:0;font-size:11px;align-self:center}
+    #axrow select,#filtrow select{width:100%;min-width:0;
+                                  padding:7px 2px 7px 5px;font-size:13px}
     #axrow b{font-size:12px;white-space:nowrap}
     .jiku{display:none}
     select{max-width:42vw}
@@ -91,9 +102,11 @@
     </span>
   </div>
   <div class="bar">
-    <label>階級 <select id="sf"></select></label>
-    <label>性別 <select id="sg"></select></label>
-    <span id="count" style="opacity:.65;font-size:12px"></span>
+    <span id="filtrow">
+      <label>階級 <select id="sf"></select></label>
+      <label>性別 <select id="sg"></select></label>
+      <span id="count"></span>
+    </span>
   </div>
   <div id="plotwrap">
     <div id="btns">
@@ -109,6 +122,7 @@
     <div id="plotbox">
       <div id="plot"></div>
       <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
+      <div id="tapnote">点をタップすると詳細表示</div>
     </div>
   </div>
 </div>
@@ -244,6 +258,20 @@ function showInfo(p){
     + cell("●",  "#8aa0c0", LAB[FC] || FC, cd[0]);
 }
 
+// 「点をタップすると詳細表示」を勝率バーの右下に合わせて置く
+function placeNote(){
+  const n = g("tapnote"), box = g("plotbox");
+  if (!n || !box) return;
+  const cb = g("plot").querySelector(".colorbar");
+  if (!cb){ n.style.display = "none"; return; }
+  const b = cb.getBoundingClientRect(), h = box.getBoundingClientRect();
+  n.style.display = "block";
+  const w = n.offsetWidth || 120;
+  n.style.left = Math.round(Math.max(4, Math.min(b.right - h.left - w, h.width - w - 4))) + "px";
+  n.style.top  = Math.round(b.bottom - h.top + 3) + "px";
+}
+addEventListener("resize", () => setTimeout(placeNote, 200));
+
 // ズーム（スマホはピンチが効かないことがあるのでボタンで操作する）
 function zoom(factor){
   const c = curCam.center || {x:0, y:0, z:0}, e = curCam.eye;
@@ -356,6 +384,8 @@ function render(){
       zaxis: axisCfg(LAB[fz]||fz, AXC.z, true)}
   }, {responsive:true, displaylogo:false, scrollZoom:"gl3d",
       displayModeBar: false});     // 右上のカメラ・虫眼鏡などのツールバーは出さない
+
+  setTimeout(placeNote, 80);     // 勝率バーの位置に合わせて注記を置き直す
 }
 
 // --- 3D 空間の外での回転・ズームを無効にする -----------------------------
