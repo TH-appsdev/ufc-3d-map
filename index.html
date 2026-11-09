@@ -43,9 +43,8 @@
          background:rgba(11,20,34,.75);padding:3px 8px;border-radius:7px}
   #q{min-width:150px}
   #plotbox{position:relative}
-  /* 勝率バーの右下に出す小さな案内 */
-  #tapnote{position:absolute;display:none;z-index:4;pointer-events:none;
-           font-size:10px;color:#8aa0c0;white-space:nowrap}
+  /* PC: 操作行の左端に置く案内 */
+  #tapnote{font-size:11px;color:#8aa0c0;white-space:nowrap;margin-right:6px}
   #zcap{display:none}
   .zbtn{display:none}
   #info{display:none}
@@ -82,6 +81,9 @@
     .zbtn:active{background:#3a5f99}
     #plot{height:min(52vh, 380px);min-height:290px}
     /* 詳細はグラフの外（枠の下部）に出すので、点に被らない */
+    /* スマホ: 勝率バーのすぐ下に置く */
+    #tapnote{position:absolute;z-index:4;pointer-events:none;
+             font-size:10px;margin:0}
     #zcap{display:block;position:absolute;left:2px;top:42%;z-index:4;
           writing-mode:vertical-rl;transform:rotate(180deg);
           font-size:10px;pointer-events:none;white-space:nowrap}
@@ -110,6 +112,7 @@
   </div>
   <div id="plotwrap">
     <div id="btns">
+      <span id="tapnote">点をタップすると詳細表示</span>
       <label id="qwrap">🔍<span class="qtxt"> 名前検索</span>
         <input id="q" placeholder="例: Pantoja"></label>
       <button id="zout" class="zbtn" title="縮小">−</button>
@@ -122,7 +125,6 @@
     <div id="plotbox">
       <div id="plot"></div>
       <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
-      <div id="tapnote">点をタップすると詳細表示</div>
     </div>
   </div>
 </div>
@@ -258,17 +260,18 @@ function showInfo(p){
     + cell("●",  "#8aa0c0", LAB[FC] || FC, cd[0]);
 }
 
-// 「点をタップすると詳細表示」を勝率バーの右下に合わせて置く
+// スマホでは「点をタップすると詳細表示」を勝率バーの真下に置く
+// （PC では操作行の左端に普通に並ぶので位置調整は不要）
 function placeNote(){
-  const n = g("tapnote"), box = g("plotbox");
-  if (!n || !box) return;
+  if (!MOBILE) return;
+  const n = g("tapnote"), host = g("plotwrap");
   const cb = g("plot").querySelector(".colorbar");
-  if (!cb){ n.style.display = "none"; return; }
-  const b = cb.getBoundingClientRect(), h = box.getBoundingClientRect();
-  n.style.display = "block";
+  if (!n || !host || !cb){ return; }
+  const b = cb.getBoundingClientRect(), h = host.getBoundingClientRect();
   const w = n.offsetWidth || 120;
-  n.style.left = Math.round(Math.max(4, Math.min(b.right - h.left - w, h.width - w - 4))) + "px";
-  n.style.top  = Math.round(b.bottom - h.top + 3) + "px";
+  const cx = (b.left + b.right) / 2 - h.left - w / 2;      // バーの中央にそろえる
+  n.style.left = Math.round(Math.max(6, Math.min(cx, h.width - w - 6))) + "px";
+  n.style.top  = Math.round(b.bottom - h.top + 4) + "px";
 }
 addEventListener("resize", () => setTimeout(placeNote, 200));
 
