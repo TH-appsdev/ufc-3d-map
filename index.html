@@ -34,8 +34,8 @@
             background:rgba(79,116,171,.10);overflow:hidden}
   #plot{height:clamp(360px, 70vh, 760px)}
   #btns{position:absolute;top:10px;right:12px;z-index:5;display:flex;gap:6px}
+  #zcap{display:none}
   .zbtn{display:none}
-  #axkey{display:none}
   #info{display:none}
 
   /* --- スマートフォン --- */
@@ -54,12 +54,12 @@
           font-weight:700;background:#2b4a7a;border-color:#4e7ab8}
     .zbtn:active{background:#3a5f99}
     #plot{height:min(58vh, 440px);min-height:300px}
-    /* 軸の凡例。カラーバーの下の空きスペースに置く */
-    #axkey{display:block;position:absolute;left:8px;top:74px;z-index:4;
-           pointer-events:none;font-size:10px;line-height:1.5;
-           background:rgba(11,20,34,.5);padding:3px 6px;border-radius:5px}
     /* 詳細はグラフの外（枠の下部）に出すので、点に被らない */
-    #info{display:block;min-height:58px;padding:7px 10px 9px;
+    #zcap{display:block;position:absolute;left:2px;top:40%;z-index:4;
+          writing-mode:vertical-rl;transform:rotate(180deg);
+          font-size:10px;pointer-events:none;white-space:nowrap}
+    .ic{display:inline-block;margin:0 10px 2px 0;white-space:nowrap}
+    #info{display:block;min-height:54px;padding:7px 10px 9px;
           border-top:1px solid #35507d;background:rgba(11,20,34,.55);
           font-size:11.5px;line-height:1.5}
   }
@@ -79,7 +79,7 @@
   </div>
   <div id="plotwrap">
     <div id="plot"></div>
-    <div id="axkey"></div><!-- スマホ用: どの軸が何かの凡例 -->
+    <div id="zcap"></div><!-- スマホ用: Z軸のキャプション -->
     <div id="btns">
       <button id="zout" class="zbtn" title="縮小">−</button>
       <button id="zin"  class="zbtn" title="拡大">＋</button>
@@ -101,7 +101,7 @@ const FC = "win_rate";          // 色に使うスタッツ（固定）
 const MOBILE = window.matchMedia("(max-width: 640px)").matches;
 // 初期視点。狭い画面では立方体の角が切れないよう少し引く。
 // 「視点を初期位置に戻す」も同じ値を使うので、初期表示と完全に一致する。
-const CAM = {eye: MOBILE ? {x:1.90, y:1.90, z:1.12} : {x:1.50, y:1.50, z:0.95}};
+const CAM = {eye: MOBILE ? {x:2.10, y:2.10, z:1.24} : {x:1.50, y:1.50, z:0.95}};
 let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き継ぐために保持する。
 
 // 左右の回り込みは360°自由。上下だけ制限する。
@@ -176,10 +176,9 @@ const SCALE = [[0,"#2a6fd6"],[0.5,"#ded7c6"],[1,"#d8352f"]];   // 低=青 → �
 const AXC = {x:"#ff6a00", y:"#e03cff", z:"#00f0a0"};  // 軸の識別色（軸タイトルと縁のみ）
 const SPIKE = "#c3d1e4";                              // ホバー時のガイド線（3軸とも同色）
 
-function axisCfg(title, color){
-  // 狭い画面では軸タイトルが端で切れてしまうので出さない。
-  // 代わりに上のプルダウンのラベルを軸色にして対応づける。
-  return {title:{text: MOBILE ? "" : title, font:{color:color, size:14}},
+function axisCfg(title, color, isZ){
+  return {title:{text: (MOBILE && isZ) ? "" : title,
+                 font:{color:color, size: MOBILE ? 10 : 14}},
           tickfont:{color:"#d4e0f0", size: MOBILE ? 9 : 11},
           showbackground:true, backgroundcolor:"#16263f",   // 立方体の面を少し明るく
           gridcolor:"#5a749c", gridwidth:2,                 // 格子線をはっきり
@@ -196,14 +195,6 @@ function row(ax, field, val){
 
 let curF = {x:"", y:"", z:""};   // いま各軸に割り当てている指標
 
-// スマホ用：軸の凡例（3D 内のタイトルは端で切れるため、枠内に別途表示する）
-function renderAxKey(){
-  if (!MOBILE) return;
-  g("axkey").innerHTML = ["x","y","z"].map(a =>
-    "<span style='color:" + AXC[a] + "'>■ " + a.toUpperCase() + "</span> "
-    + (LAB[curF[a]] || curF[a])).join("<br>");
-}
-
 // スマホ用：タップした選手の詳細。グラフの外に出すので点が隠れない。
 const INFO_HINT = "<span style='opacity:.55'>点をタップすると選手の詳細が出ます</span>";
 function showInfo(p){
@@ -212,13 +203,15 @@ function showInfo(p){
   const cd = p.customdata || [];
   const num = v => v == null ? "-"
       : (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
-  const cell = (a, v) => "<span style='color:" + AXC[a] + "'>" + a.toUpperCase()
-                       + "</span> <b>" + num(v) + "</b>";
+  // 軸が何を示しているか（指標名）と数値、最後に勝率
+  const cell = (mark, col, name, v) =>
+      "<span class='ic'><span style='color:" + col + "'>" + mark + "</span> "
+    + name + " <b>" + num(v) + "</b></span>";
   g("info").innerHTML =
-      "<b style='font-size:13px'>" + (p.text || "") + "</b>"
-    + "<span style='opacity:.6'>　" + (cd[1] || "") + "</span><br>"
-    + cell("x", p.x) + "　" + cell("y", p.y) + "　" + cell("z", p.z)
-    + "　<span style='color:#8aa0c0'>●</span> 勝率 <b>" + num(cd[0]) + "</b>";
+      cell("■ X", AXC.x, LAB[curF.x] || curF.x, p.x)
+    + cell("■ Y", AXC.y, LAB[curF.y] || curF.y, p.y)
+    + cell("■ Z", AXC.z, LAB[curF.z] || curF.z, p.z)
+    + cell("●",  "#8aa0c0", LAB[FC] || FC, cd[0]);
 }
 
 // ズーム（スマホはピンチが効かないことがあるのでボタンで操作する）
@@ -237,7 +230,8 @@ function zoom(factor){
 function render(){
   const fx=sx.value, fy=sy.value, fz=sz.value, fc=FC;
   curF = {x:fx, y:fy, z:fz};
-  renderAxKey();
+  if (MOBILE) g("zcap").innerHTML =
+    "<span style='color:" + AXC.z + "'>" + (LAB[fz]||fz) + "</span>";
   const flt=sf.value, gen=sg.value, query=norm(q.value.trim());
   const X=D.stats[fx], Y=D.stats[fy], Z=D.stats[fz], C=D.stats[fc];
 
@@ -254,6 +248,7 @@ function render(){
   const cmin = cv.length ? Math.min(...cv) : 0, cmax = cv.length ? Math.max(...cv) : 1;
 
   // ツールチップの中身。通常の点でも検索でヒットした点でも同じものを使う。
+  const NAME_ONLY = "<b>%{text}</b><extra></extra>";
   const HOVER =
       "<b style='font-size:14px'>%{text}</b>"
     + "<span style='color:#8aa0c0'>　%{customdata[1]}</span><br>"
@@ -268,15 +263,14 @@ function render(){
             opacity: query ? 0.22 : 0.92, line:{width:0.4, color:"#0f1a2b"},
             // 狭い画面では縦のカラーバーが Z 軸を圧迫するので、上部に横向きで置く
             colorbar: MOBILE
-              ? {orientation:"h", x:0.5, xanchor:"center", y:1.0, yanchor:"bottom",
-                 len:0.92, thickness:9, outlinewidth:0,
-                 title:{text:LAB[fc]||fc, side:"top", font:{size:11}},
+              ? {orientation:"h", x:0.42, xanchor:"center", y:1.0, yanchor:"top",
+                 len:0.72, thickness:8, outlinewidth:0,
+                 title:{text:LAB[fc]||fc, side:"right", font:{size:10}},
                  tickfont:{color:"#d4e0f0", size:9}}
               : {title:{text:LAB[fc]||fc, side:"right", font:{size:13}},
                  len:0.6, thickness:14, outlinewidth:0,
                  tickfont:{color:"#d4e0f0", size:11}}},
-    hovertemplate: HOVER,
-    hoverinfo: MOBILE ? "none" : "all",   // スマホは吹き出しを出さず下の欄に表示
+    hovertemplate: MOBILE ? NAME_ONLY : HOVER,
     hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#55688a",
                 font:{color:"#e8eef7", size:13}}
   }];
@@ -301,8 +295,7 @@ function render(){
               color:hc, colorscale:SCALE, cmin:cmin, cmax:cmax, showscale:false,
               line:{color:"#ffffff", width:2}},
       // 通常の点と同じ内容（X/Y/Z の値と勝率）を出す
-      hovertemplate: HOVER,
-      hoverinfo: MOBILE ? "none" : "all",
+      hovertemplate: MOBILE ? NAME_ONLY : HOVER,
       hoverlabel:{bgcolor:"rgba(12,21,36,0.94)", bordercolor:"#ffffff",
                   font:{color:"#e8eef7", size:13}}
     });
@@ -315,12 +308,12 @@ function render(){
   Plotly.react("plot", traces, {
     paper_bgcolor:"rgba(0,0,0,0)",   // 枠の淡い塗りを透かす
     font:{color:"#e8eef7", size: MOBILE ? 11 : 12},
-    margin: MOBILE ? {l:18, r:10, t:48, b:10} : {l:0, r:0, t:6, b:0},
+    margin: MOBILE ? {l:26, r:20, t:8, b:14} : {l:0, r:0, t:6, b:0},
     showlegend: false,
     scene:{aspectmode:"cube", hovermode:"closest", camera: curCam,
       xaxis: axisCfg(LAB[fx]||fx, AXC.x),
       yaxis: axisCfg(LAB[fy]||fy, AXC.y),
-      zaxis: axisCfg(LAB[fz]||fz, AXC.z)}
+      zaxis: axisCfg(LAB[fz]||fz, AXC.z, true)}
   }, {responsive:true, displaylogo:false, scrollZoom:"gl3d",
       displayModeBar: false});     // 右上のカメラ・虫眼鏡などのツールバーは出さない
 }
