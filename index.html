@@ -150,12 +150,16 @@ let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き
 // 下に回り込むと床を見上げる形になり「反転した」ように見えるので、水平より下は禁止。
 // 上も真上を越えると反転するので手前で止める。
 const RAD = Math.PI / 180;
+// 上下の回転制限。true にすると ELEV_MIN〜ELEV_MAX の範囲に収める。
+// false なら plotly の既定どおり自由に回せる（真上を越えると上下が反転する）。
+const LIMIT_ROTATION = false;
 const ELEV_MIN = 8 * RAD;      // 下限（水平近くまで寝かせない）
 const ELEV_MAX = 80 * RAD;     // 上限（真上の手前）
 
 // 範囲内なら null、外れていれば境界に戻したカメラを返す。
 // 距離（ズーム）は変えず、角度だけ補正する。
 function clampCam(cam){
+  if (!LIMIT_ROTATION) return null;
   if (!cam || !cam.eye) return null;
   const c = cam.center || {x:0, y:0, z:0};
   const dx = cam.eye.x - c.x, dy = cam.eye.y - c.y, dz = cam.eye.z - c.z;
@@ -459,6 +463,7 @@ function installGuards(){
     clampLive();
     raf = requestAnimationFrame(tick);
   };
+  if (LIMIT_ROTATION)
   ["mousedown", "touchstart"].forEach(t =>
     plot.addEventListener(t, () => {
       dragging = true;
