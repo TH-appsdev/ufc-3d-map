@@ -150,8 +150,8 @@ let curCam = CAM;   // 現在の視点。軸を変えても回転状態を引き
 // 下に回り込むと床を見上げる形になり「反転した」ように見えるので、水平より下は禁止。
 // 上も真上を越えると反転するので手前で止める。
 const RAD = Math.PI / 180;
-const ELEV_MIN = 15 * RAD;     // 下限（水平近くまで寝かせると読みにくいので手前で止める）
-const ELEV_MAX = 70 * RAD;     // 上限（真上の手前）
+const ELEV_MIN = 8 * RAD;      // 下限（水平近くまで寝かせない）
+const ELEV_MAX = 80 * RAD;     // 上限（真上の手前）
 
 // 範囲内なら null、外れていれば境界に戻したカメラを返す。
 // 距離（ズーム）は変えず、角度だけ補正する。
@@ -416,6 +416,27 @@ function liveElev(){
   return r > 0 ? Math.asin(Math.max(-1, Math.min(1, dz/r))) : null;
 }
 
+// 描画中のカメラを直接読み書きして、仰角だけを範囲内に収める。
+// 方位（左右の回り込み）と距離（ズーム）はユーザーの操作のまま保つ。
+function clampLive(){
+  const gd = g("plot");
+  let sc = null;
+  try { sc = gd._fullLayout && gd._fullLayout.scene && gd._fullLayout.scene._scene; }
+  catch (e) { return false; }
+  if (!sc || typeof sc.getCamera !== "function" || typeof sc.setViewport !== "function") {
+    return false;                         // 使えない環境では何もしない
+  }
+  let cam;
+  try { cam = sc.getCamera(); } catch (e) { return false; }
+  const fixed = clampCam(cam);
+  if (!fixed){ if (cam && cam.eye) curCam = cam; return true; }
+  try {
+    sc.setViewport({camera: fixed, aspectratio: gd._fullLayout.scene.aspectratio});
+    curCam = fixed;
+  } catch (e) { return false; }
+  return true;
+}
+
 let guardsInstalled = false;
 function installGuards(){
   if (guardsInstalled) return;
@@ -429,40 +450,29 @@ function installGuards(){
     if (x == null || y == null) return true;
     return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
   };
-  // 上限・下限に達したら、それ以上めくる向きの指の動きを plotly に渡さない。
-  // （離したあとの補正だけでは、ドラッグ中に一瞬裏返って見えてしまうため）
-  let lx = null, ly = null;
-  const pos = ev => {
-    const t = ev.touches && ev.touches[0];
-    return {x: t ? t.clientX : ev.clientX, y: t ? t.clientY : ev.clientY};
+  // 回転は一切ブロックせず（止めると操作がカクつくため）、
+  // plotly がカメラを動かした直後・同じフレーム内で仰角だけ境界に戻す。
+  // 描画される前に補正が入るので、行き過ぎた絵が表示されることはない。
+  let dragging = false, raf = null;
+  const tick = () => {
+    if (!dragging){ raf = null; return; }
+    clampLive();
+    raf = requestAnimationFrame(tick);
   };
   ["mousedown", "touchstart"].forEach(t =>
-    plot.addEventListener(t, ev => { const p = pos(ev); lx = p.x; ly = p.y; },
-                          {capture:true, passive:true}));
-  ["mousemove", "touchmove"].forEach(type => {
-    plot.addEventListener(type, ev => {
-      const p = pos(ev);
-      if (p.x == null || p.y == null) return;
-      if (lx != null){
-        const dy = p.y - ly;
-        const e = liveElev();
-        if (e != null && dy !== 0){
-          // この移動で仰角がどこまで動くかを見積もり、範囲を越えるなら渡さない。
-          // 速くスワイプされても一瞬裏返らないよう、事前に止めるのが要点。
-          // （横の動きが主なら dy が小さく見積もりも範囲内に収まるので、
-          //   境界に貼り付いたままでも左右の回転は続けられる）
-          const h = plot.getBoundingClientRect().height || 1;
-          const next = e + dy * (170 * RAD / h);
-          if (next < ELEV_MIN || next > ELEV_MAX){
-            ev.stopPropagation();
-            if (ev.cancelable) ev.preventDefault();
-            return;                           // lx/ly は更新せず、境界に貼り付ける
-          }
-        }
-      }
-      lx = p.x; ly = p.y;
-    }, {capture:true, passive:false});
-  });
+    plot.addEventListener(t, () => {
+      dragging = true;
+      if (raf == null) raf = requestAnimationFrame(tick);
+    }, {capture:true, passive:true}));
+  ["mouseup", "touchend", "touchcancel"].forEach(t =>
+    addEventListener(t, () => {
+      dragging = false;
+      setTimeout(clampLive, 60);
+    }, {capture:true, passive:true}));
+  // バブリング段階＝plotly のハンドラのあとに走らせる
+  ["mousemove", "touchmove"].forEach(t =>
+    plot.addEventListener(t, () => { if (dragging) clampLive(); },
+                          {capture:false, passive:true}));
 
   ["wheel", "mousedown", "touchstart"].forEach(type => {
     plot.addEventListener(type, ev => {
